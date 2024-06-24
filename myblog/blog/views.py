@@ -1,5 +1,5 @@
 from django.shortcuts import render,  get_object_or_404
-from blog.forms import CommentForm, EmailPostForm
+from blog.forms import CommentForm, EmailPostForm, SearchForm
 from .models import Post
 from django.views.generic import ListView
 from django.core.mail import send_mail
@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from taggit.models import Tag
 from django.db.models import Count
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 
 # Functions Views
 def post_list(request, tag_slug=None):
@@ -92,3 +93,18 @@ def post_comment(request, post_id):
         # Save the comment to the database
         comment.save()
     return render(request, 'blog/post/comment.html', {'post': post, 'form': form, 'comment': comment})
+
+def post_search(request):
+    form = SearchForm()
+    query = None
+    results = []
+
+    if 'query' in request.GET:
+        form = SearchForm(request.GET)
+        if form.is_valid():
+            query = form.cleaned_data['query']
+            search_vector = SearchVector('title', 'body')
+            search_query = SearchQuery(query, config='english')
+            results = Post.objects.annotate(search=search_vector, rank=SearchRank(search_vector, search_query)).filter(search=query).order_by('-rank')
+
+    return render(request, 'blog/post/search.html', {'form': form, 'query': query, 'results': results})
